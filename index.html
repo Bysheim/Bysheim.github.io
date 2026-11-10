@@ -23,6 +23,7 @@
   p.hint { color: #666; font-size: 14px; margin-top: 14px; }
   p.error { color: #c62828; font-size: 14px; margin: 10px 0 0; min-height: 18px; }
   .big { font-size: 26px; font-weight: 600; }
+  .sub { font-size: 17px; color: #444; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -47,6 +48,7 @@
   <!-- SUCCESS VIEW -->
   <div id="success-view" style="display:none">
     <p class="big">Successfully joined!</p>
+    <p class="sub" id="successName"></p>
   </div>
 
 </div>
@@ -66,9 +68,32 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+// ===== Per-device memory =====
+// Stores the name this device joined with, so a device can only join once
+// and skips the name prompt on every future visit.
+const STORE_KEY = "qr_join_name";
+function getJoinedName() {
+  try { return localStorage.getItem(STORE_KEY); } catch (e) { return null; }
+}
+function setJoinedName(name) {
+  try { localStorage.setItem(STORE_KEY, name); } catch (e) {}
+}
+
 // ===== Routing based on URL params =====
 const params = new URLSearchParams(location.search);
-const view = params.get("join") ? "join" : params.get("success") ? "success" : "main";
+let view = params.get("join") ? "join" : params.get("success") ? "success" : "main";
+
+// Device already joined? Skip the prompt, go straight to success.
+if (view === "join" && getJoinedName()) {
+  location.replace(location.pathname + "?success=1");
+}
+
+// Success page greets the user by their stored name.
+if (view === "success") {
+  const name = getJoinedName();
+  document.getElementById("successName").textContent = name ? "Welcome, " + name + "!" : "";
+}
+
 document.getElementById(view + "-view").style.display = "block";
 
 // Sanitize a name into a valid RTDB key (no . $ # [ ] /), keeps case-insensitive uniqueness
@@ -128,6 +153,7 @@ async function submitName() {
       input.select();
       return;
     }
+    setJoinedName(name);                 // lock this device to this name
     location.href = location.pathname + "?success=1";
   } catch (err) {
     errorEl.textContent = "Something went wrong: " + err.message;
