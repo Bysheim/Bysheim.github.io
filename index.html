@@ -8,12 +8,25 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
   * { box-sizing: border-box; font-family: system-ui, sans-serif; }
-  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f5f6fa; color: #222; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: #f5f6fa; color: #222;
+    -webkit-user-select: none;    /* ikkje mogleg å merkera tekst */
+    user-select: none;
+    caret-color: transparent;     /* ingen blinkande skrivemerkje */
+  }
   #main-wrapper { display: flex; flex-direction: column; align-items: center; gap: 18px; max-width: 90vw; }
   .card { background: #fff; padding: 32px 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.08); text-align: center; max-width: 90vw; }
   h1 { font-size: 22px; margin: 0 0 16px; }
   img.qr { width: 240px; height: 240px; border: 1px solid #ddd; border-radius: 8px; }
-  input { padding: 10px 14px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; width: 100%; max-width: 300px; }
+  input {
+    padding: 10px 14px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px;
+    width: 100%; max-width: 300px;
+    -webkit-user-select: text;    /* tekstfeltet skal framleis vera skrivebart */
+    user-select: text;
+    caret-color: auto;
+  }
   input.invalid { border-color: #c62828; }
   button { margin-top: 16px; padding: 10px 24px; font-size: 16px; border: none; border-radius: 8px; background: #6d4aff; color: #fff; cursor: pointer; }
   button:hover { background: #5a3ce0; }
@@ -130,20 +143,27 @@ if (view === "join" && getJoinedName()) {
   location.replace(location.pathname + "?success=1");
 }
 
-// Suksessvisning: helsing + levande vakthald over eigen namne-post.
+// Suksessvisning: helsing + kontrollert, levande vakthald over eigen post.
 if (view === "success") {
   const name = getJoinedName();
   if (!name) {
-    // Ingen lagra namn (t.d. tømtlager) -> tilbake til påmelding
+    // Ingen lagra namn -> tilbake til påmelding
     location.replace(location.pathname + "?join=1");
   } else {
     document.getElementById("successName").textContent = "Velkomen, " + name + "!";
-    // Blir namnet fjerna frå databasen (frå hovudsida), blir eininga
-    // kasta tilbake til påmeldingssida.
-    db.ref("joins/" + nameKey(name)).on("value", snap => {
-      if (!snap.exists() && getJoinedName() === name) {
-        forgetJoin();
-        location.replace(location.pathname + "?join=1");
+
+    // Ein post gjeld berre om ho finnast OG høyrer til denne eininga.
+    // Er ho borte (fjerna frå hovudsida) eller teken av ei anna eining,
+    // blir den lokale namnehukommelsen sletta og brukaren sendt til påmeldinga.
+    const myKey = "joins/" + nameKey(name);
+    const myDevice = getDeviceId();
+    db.ref(myKey).on("value", snap => {
+      const entry = snap.val();
+      if (!entry || entry.device !== myDevice) {
+        if (getJoinedName() === name) {
+          forgetJoin();
+          location.replace(location.pathname + "?join=1");
+        }
       }
     });
   }
@@ -221,15 +241,27 @@ async function submitName() {
     return;
   }
 
+  const myDevice = getDeviceId();
+
   try {
-    // Transaksjonen garanterer at sjekk og skriving skjer atomisk,
-    // så to personar som sender same namn samtidig kan ikkje begge vinna.
+    // Transaksjonen garanterer at sjekk og skriving skjer atomisk.
+    // - Fritt namn -> skriv med kopling til denne eininga.
+    // - Namnet finst frå før på SAME eining -> ingen endring (idempotent).
+    // - Namnet finst frå før på ei ANNA eining -> avbryt (namnet er teke).
     const result = await db.ref("joins/" + nameKey(name)).transaction(current => {
-      if (current) return;               // allereie tatt -> avbryt transaksjonen
-      return { name: name, time: Date.now(), device: getDeviceId() };
+      if (current && current.device === myDevice) return; // eigentleg min post
+      if (current) return;                                 // teke av ei anna eining
+      return { name: name, time: Date.now(), device: myDevice };
     });
 
     if (!result.committed) {
+      const current = result.snapshot.val();
+      if (current && current.device === myDevice) {
+        // Posten høyrer allereie til denne eininga -> gå til suksess
+        setJoinedName(name);
+        location.href = location.pathname + "?success=1";
+        return;
+      }
       input.classList.add("invalid");
       errorEl.textContent = "Dette namnet er allereie teke. Prøv eit anna.";
       input.select();
@@ -246,7 +278,13 @@ async function submitName() {
 async function leave() {
   const name = getJoinedName();
   try {
-    if (name) await db.ref("joins/" + nameKey(name)).remove();
+    if (name) {
+      const snap = await db.ref("joins/" + nameKey(name)).get();
+      // Berre fjern posten om ho faktisk høyrer til denne eininga
+      if (snap.exists() && snap.val().device === getDeviceId()) {
+        await db.ref("joins/" + nameKey(name)).remove();
+      }
+    }
   } catch (err) { /* fjern lokalt uansett */ }
   forgetJoin();
   location.replace(location.pathname + "?join=1");
