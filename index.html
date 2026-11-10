@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nn">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QR Join</title>
+<title>Høveleg Gissing</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
@@ -45,33 +45,32 @@
 <body>
 <div class="card">
 
-  <!-- MAIN VIEW: QR code + joined names -->
+  <!-- HOVEDVISNING: QR-kode + påmelde navn -->
   <div id="main-view" style="display:none">
-    <h1>Scan to join</h1>
-    <img class="qr" id="qr" alt="QR code">
-    <p class="hint">Names appear below as people join. Click a name to remove it.</p>
+    <h1>Skann for å bli med</h1>
+    <img class="qr" id="qr" alt="QR-kode">
     <div class="chip-grid" id="names"></div>
-    <p class="empty-msg" id="emptyMsg">No one has joined yet.</p>
+    <p class="empty-msg" id="emptyMsg">Ingen har blitt med endå.</p>
   </div>
 
-  <!-- JOIN VIEW: name prompt -->
+  <!-- PÅMELDINGSVISNING: namn -->
   <div id="join-view" style="display:none">
-    <h1>Enter your name</h1>
-    <input id="nameInput" type="text" placeholder="Your name" maxlength="50" autocomplete="off">
+    <h1>Skriv inn namnet ditt</h1>
+    <input id="nameInput" type="text" placeholder="Namnet ditt" maxlength="50" autocomplete="off">
     <p class="error" id="joinError"></p>
-    <button onclick="submitName()">Join</button>
+    <button onclick="submitName()">Bli med</button>
   </div>
 
-  <!-- SUCCESS VIEW -->
+  <!-- SUKSESSVISNING -->
   <div id="success-view" style="display:none">
-    <p class="big">Successfully joined!</p>
+    <p class="big">Du er påmeldt!</p>
     <p class="sub" id="successName"></p>
   </div>
 
 </div>
 
 <script>
-// ===== Firebase setup =====
+// ===== Firebase-oppsett =====
 const firebaseConfig = {
   apiKey: "AIzaSyBSpDow4pLHjOBknB2EMeGMSSUJGy7DyYE",
   authDomain: "uinformert.firebaseapp.com",
@@ -85,7 +84,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ===== Per-device memory =====
+// ===== Per-eininga-lager =====
 const STORE_KEY = "qr_join_name";
 function getJoinedName() {
   try { return localStorage.getItem(STORE_KEY); } catch (e) { return null; }
@@ -94,54 +93,55 @@ function setJoinedName(name) {
   try { localStorage.setItem(STORE_KEY, name); } catch (e) {}
 }
 
-// ===== Routing based on URL params =====
+// ===== Rutinging basert på URL-parametrar =====
 const params = new URLSearchParams(location.search);
 let view = params.get("join") ? "join" : params.get("success") ? "success" : "main";
 
-// Device already joined? Skip the prompt, go straight to success.
+// Eininga har allereie blitt med? Hopp rett til suksessvisninga.
 if (view === "join" && getJoinedName()) {
   location.replace(location.pathname + "?success=1");
 }
 
-// Success page greets the user by their stored name.
+// Suksessidene tek imot brukaren med det lagra namnet.
 if (view === "success") {
   const name = getJoinedName();
-  document.getElementById("successName").textContent = name ? "Welcome, " + name + "!" : "";
+  document.getElementById("successName").textContent = name ? "Velkomen, " + name + "!" : "";
 }
 
 document.getElementById(view + "-view").style.display = "block";
 
-// Sanitize a name into a valid RTDB key (no . $ # [ ] /), keeps case-insensitive uniqueness
+// Ryddar eit namn til ein gyldig RTDB-nøkkel (utan . $ # [ ] /),
+// slik at unikskapen er case-uavhengig
 function nameKey(name) {
   return name.toLowerCase().replace(/[.$#[\]/]/g, "").trim();
 }
 
-// ===== Chip colors =====
-// Fixed pastel palette; the name's key is hashed so each name gets a
-// stable "random" color (same for everyone, survives reloads).
+// ===== Chip-fargar =====
+// Fast palett; namnenøkkelen blir hash'a slik at kvart namn får
+// ei stabil "tilfeldig" farge (den same for alle, halder etter oppdateringar).
 const PALETTE = [
-  ["#FFD6E0", "#8a2c47"], // pink bg, dark pink text
-  ["#FFE8CC", "#8a5514"], // peach
-  ["#FFF6BD", "#7d6a0a"], // yellow
-  ["#D4F0F0", "#14646b"], // teal
+  ["#FFD6E0", "#8a2c47"], // rosa bakgrunn, mørk rosa tekst
+  ["#FFE8CC", "#8a5514"], // fersken
+  ["#FFF6BD", "#7d6a0a"], // gul
+  ["#D4F0F0", "#14646b"], // turkis
   ["#CCD5FF", "#38418c"], // periwinkle
-  ["#E3D5FF", "#5b359e"], // lavender
-  ["#D8F3DC", "#2b6b38"], // mint
+  ["#E3D5FF", "#5b359e"], // lavendel
+  ["#D8F3DC", "#2b6b38"], // mynte
   ["#FFE0EC", "#a13457"]  // rose
 ];
 function chipColor(key) {
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  return PALETTE[h % PALETTE.length]; // returns [bg, textColor]
+  return PALETTE[h % PALETTE.length]; // returnerer [bakgrunn, tekstfarge]
 }
 
-// Build the join URL (current page URL + ?join=1), then render QR from it
+// Bygg påmeldings-URL (denne sida + ?join=1), og teikna QR-koden frå den
 if (view === "main") {
   const url = location.origin + location.pathname + "?join=1";
   document.getElementById("qr").src =
     "https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=" + encodeURIComponent(url);
 
-  // Live grid of name chips — click a chip to remove it
+  // Levande rutenett av namne-chips — klikk på ein chip for å fjerna han
   db.ref("joins").on("value", snap => {
     const data = snap.val() || {};
     const grid = document.getElementById("names");
@@ -155,19 +155,19 @@ if (view === "main") {
       const chip = document.createElement("span");
       chip.className = "chip";
       chip.textContent = entry.name;
-      chip.title = "Click to remove";
+      chip.title = "Klikk for å fjerna";
       chip.style.background = bg;
       chip.style.color = fg;
       chip.onclick = () => {
         db.ref("joins/" + key).remove()
-          .catch(err => alert("Could not remove: " + err.message));
+          .catch(err => alert("Klarte ikkje å fjerna: " + err.message));
       };
       grid.appendChild(chip);
     });
   });
 }
 
-// ===== Join submission =====
+// ===== Påmelding =====
 async function submitName() {
   const input = document.getElementById("nameInput");
   const errorEl = document.getElementById("joinError");
@@ -175,36 +175,36 @@ async function submitName() {
   input.classList.remove("invalid");
   errorEl.textContent = "";
 
-  // Reject truly empty names: blank input, whitespace-only,
-  // or names made solely of characters that get stripped (e.g. "...").
+  // Avvis namn som er tomme: blank input, berre mellomrom,
+  // eller namn som berre består av teikn som blir fjerna (t.d. "...").
   if (!name || !nameKey(name)) {
     input.classList.add("invalid");
-    errorEl.textContent = "Please enter a valid name.";
+    errorEl.textContent = "Skriv inn eit gyldig namn.";
     return;
   }
 
   try {
-    // Transaction guarantees the check and write happen atomically,
-    // so two people submitting the same name at the same time can't both win.
+    // Transaksjonen garanterer at sjekk og skriving skjer atomisk,
+    // så to personar som sender same namn samtidig kan ikkje begge vinna.
     const result = await db.ref("joins/" + nameKey(name)).transaction(current => {
-      if (current) return;               // already taken -> abort transaction
+      if (current) return;               // allereie tatt -> avbryt transaksjonen
       return { name: name, time: Date.now() };
     });
 
     if (!result.committed) {
       input.classList.add("invalid");
-      errorEl.textContent = "That name has already been entered. Try another one.";
+      errorEl.textContent = "Dette namnet er allereie teke. Prøv eit anna.";
       input.select();
       return;
     }
-    setJoinedName(name);                 // lock this device to this name
+    setJoinedName(name);                 // lås denne eininga til dette namnet
     location.href = location.pathname + "?success=1";
   } catch (err) {
-    errorEl.textContent = "Something went wrong: " + err.message;
+    errorEl.textContent = "Noko gjekk gale: " + err.message;
   }
 }
 
-// Enter key submits too
+// Enter-tasten sender også
 document.getElementById("nameInput")?.addEventListener("keydown", e => {
   if (e.key === "Enter") submitName();
 });
