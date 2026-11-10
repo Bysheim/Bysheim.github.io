@@ -17,6 +17,8 @@
   input.invalid { border-color: #c62828; }
   button { margin-top: 16px; padding: 10px 24px; font-size: 16px; border: none; border-radius: 8px; background: #6d4aff; color: #fff; cursor: pointer; }
   button:hover { background: #5a3ce0; }
+  button.secondary { background: #fff; color: #6d4aff; border: 1px solid #6d4aff; }
+  button.secondary:hover { background: #f0ecff; }
   p.error { color: #c62828; font-size: 14px; margin: 10px 0 0; min-height: 18px; }
   .big { font-size: 26px; font-weight: 600; }
   .sub { font-size: 17px; color: #444; margin-top: 6px; }
@@ -59,6 +61,7 @@
 <div class="card" id="success-view" style="display:none">
   <p class="big">Du er påmeldt!</p>
   <p class="sub" id="successName"></p>
+  <button class="secondary" onclick="leave()">Meld meg av</button>
 </div>
 
 <!-- HOVEDVISNING: QR-kort med namneliste under -->
@@ -89,12 +92,33 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 // ===== Per-eininga-lager =====
-const STORE_KEY = "qr_join_name";
-function getJoinedName() {
-  try { return localStorage.getItem(STORE_KEY); } catch (e) { return null; }
+const STORE_NAME = "qr_join_name";
+const STORE_DEVICE = "qr_join_device";
+function lsGet(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
 }
-function setJoinedName(name) {
-  try { localStorage.setItem(STORE_KEY, name); } catch (e) {}
+function lsSet(key, val) {
+  try { localStorage.setItem(key, val); } catch (e) {}
+}
+function lsDel(keys) {
+  try { keys.forEach(k => localStorage.removeItem(k)); } catch (e) {}
+}
+function getDeviceId() {
+  let id = lsGet(STORE_DEVICE);
+  if (!id) {
+    id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    lsSet(STORE_DEVICE, id);
+  }
+  return id;
+}
+function getJoinedName() { return lsGet(STORE_NAME); }
+function setJoinedName(name) { lsSet(STORE_NAME, name); }
+function forgetJoin() { lsDel([STORE_NAME]); }
+
+// Ryddar eit namn til ein gyldig RTDB-nøkkel (utan . $ # [ ] /),
+// slik at unikskapen er case-uavhengig
+function nameKey(name) {
+  return name.toLowerCase().replace(/[.$#[\]/]/g, "").trim();
 }
 
 // ===== Rutinging basert på URL-parametrar =====
@@ -106,22 +130,29 @@ if (view === "join" && getJoinedName()) {
   location.replace(location.pathname + "?success=1");
 }
 
-// Suksessidene tek imot brukaren med det lagra namnet.
+// Suksessvisning: helsing + levande vakthald over eigen namne-post.
 if (view === "success") {
   const name = getJoinedName();
-  document.getElementById("successName").textContent = name ? "Velkomen, " + name + "!" : "";
+  if (!name) {
+    // Ingen lagra namn (t.d. tømtlager) -> tilbake til påmelding
+    location.replace(location.pathname + "?join=1");
+  } else {
+    document.getElementById("successName").textContent = "Velkomen, " + name + "!";
+    // Blir namnet fjerna frå databasen (frå hovudsida), blir eininga
+    // kasta tilbake til påmeldingssida.
+    db.ref("joins/" + nameKey(name)).on("value", snap => {
+      if (!snap.exists() && getJoinedName() === name) {
+        forgetJoin();
+        location.replace(location.pathname + "?join=1");
+      }
+    });
+  }
 }
 
 const viewEl = view === "main"
   ? document.getElementById("main-wrapper")
   : document.getElementById(view + "-view");
 viewEl.style.display = view === "main" ? "flex" : "block";
-
-// Ryddar eit namn til ein gyldig RTDB-nøkkel (utan . $ # [ ] /),
-// slik at unikskapen er case-uavhengig
-function nameKey(name) {
-  return name.toLowerCase().replace(/[.$#[\]/]/g, "").trim();
-}
 
 // ===== Chip-fargar =====
 // Fast palett; namnenøkkelen blir hash'a slik at kvart namn får
@@ -195,7 +226,7 @@ async function submitName() {
     // så to personar som sender same namn samtidig kan ikkje begge vinna.
     const result = await db.ref("joins/" + nameKey(name)).transaction(current => {
       if (current) return;               // allereie tatt -> avbryt transaksjonen
-      return { name: name, time: Date.now() };
+      return { name: name, time: Date.now(), device: getDeviceId() };
     });
 
     if (!result.committed) {
@@ -209,6 +240,16 @@ async function submitName() {
   } catch (err) {
     errorEl.textContent = "Noko gjekk gale: " + err.message;
   }
+}
+
+// ===== Meld seg av (frå suksesssida) =====
+async function leave() {
+  const name = getJoinedName();
+  try {
+    if (name) await db.ref("joins/" + nameKey(name)).remove();
+  } catch (err) { /* fjern lokalt uansett */ }
+  forgetJoin();
+  location.replace(location.pathname + "?join=1");
 }
 
 // Enter-tasten sender også
