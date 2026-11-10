@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR Join</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+  * { box-sizing: border-box; font-family: system-ui, sans-serif; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f5f6fa; color: #222; }
+  .card { background: #fff; padding: 32px 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.08); text-align: center; max-width: 90vw; }
+  h1 { font-size: 22px; margin: 0 0 16px; }
+  img.qr { width: 240px; height: 240px; border: 1px solid #ddd; border-radius: 8px; }
+  ul { text-align: left; padding-left: 20px; margin-top: 20px; }
+  li { margin: 4px 0; font-size: 17px; }
+  input { padding: 10px 14px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; width: 100%; max-width: 300px; }
+  button { margin-top: 16px; padding: 10px 24px; font-size: 16px; border: none; border-radius: 8px; background: #6d4aff; color: #fff; cursor: pointer; }
+  button:hover { background: #5a3ce0; }
+  p.hint { color: #666; font-size: 14px; margin-top: 14px; }
+  .big { font-size: 26px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <!-- MAIN VIEW: QR code + joined names -->
+  <div id="main-view" style="display:none">
+    <h1>Scan to join</h1>
+    <img class="qr" id="qr" alt="QR code">
+    <p class="hint">Names appear below as people join.</p>
+    <ul id="names"></ul>
+  </div>
+
+  <!-- JOIN VIEW: name prompt -->
+  <div id="join-view" style="display:none">
+    <h1>Enter your name</h1>
+    <input id="nameInput" type="text" placeholder="Your name" maxlength="50" autocomplete="off">
+    <br>
+    <button onclick="submitName()">Join</button>
+  </div>
+
+  <!-- SUCCESS VIEW -->
+  <div id="success-view" style="display:none">
+    <p class="big">Successfully joined!</p>
+  </div>
+
+</div>
+
+<script>
+// ===== Firebase setup =====
+// Paste your config from: Firebase Console → Project Settings → Your apps → Web app
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+  projectId: "YOUR_PROJECT",
+  appId: "YOUR_APP_ID"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ===== Routing based on URL params =====
+const params = new URLSearchParams(location.search);
+const view = params.get("join") ? "join" : params.get("success") ? "success" : "main";
+document.getElementById(view + "-view").style.display = "block";
+
+// Build the join URL (current page URL + ?join=1), then render QR from it
+if (view === "main") {
+  const url = location.origin + location.pathname + "?join=1";
+  document.getElementById("qr").src =
+    "https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=" + encodeURIComponent(url);
+
+  // Live list of names
+  db.ref("joins").on("value", snap => {
+    const data = snap.val() || {};
+    const list = document.getElementById("names");
+    list.innerHTML = "";
+    Object.values(data).forEach(entry => {
+      const li = document.createElement("li");
+      li.textContent = entry.name;
+      list.appendChild(li);
+    });
+  });
+}
+
+// ===== Join submission =====
+function submitName() {
+  const name = document.getElementById("nameInput").value.trim();
+  if (!name) { alert("Please enter a name."); return; }
+  db.ref("joins").push({ name: name, time: Date.now() })
+    .then(() => { location.href = location.pathname + "?success=1"; })
+    .catch(err => alert("Something went wrong: " + err.message));
+}
+
+// Enter key submits too
+document.getElementById("nameInput")?.addEventListener("keydown", e => {
+  if (e.key === "Enter") submitName();
+});
+</script>
+</body>
+</html>
