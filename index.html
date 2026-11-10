@@ -162,9 +162,9 @@ const params = new URLSearchParams(location.search);
 const onBareRoot = !params.toString();           // rotsida = hovudside
 
 // Admin-status blir lagra på eininga, så han overlever navigasjon
-// mellom hovudsida og kviss-sida (begge har parametrar eller ikkje).
+// mellom hovudsida og kviss-sida.
 if (onBareRoot) lsSet(STORE_ADMIN, "1");
-const isAdmin = onBareRoot || params.get("quiz") !== null && lsGet(STORE_ADMIN) === "1";
+const isAdmin = onBareRoot || (params.get("quiz") !== null && lsGet(STORE_ADMIN) === "1");
 
 const answerIdx = params.get("answer");          // ?answer=N = svarside
 let view = params.get("join") ? "join"
@@ -178,9 +178,7 @@ const myDevice = getDeviceId();
 function goTo(query) { location.replace(location.pathname + query); }
 
 // Admin-eininga: følgjer kviss-tilstanden — til kviss-sida når han
-// startar, attende til hovudsida når han avsluttast. Gjeld òg
-// ved reload, sidan tilstanden kjem frå databasen og flagget frå
-// lokal lagring.
+// startar, attende til hovudsida når han avsluttast.
 if (isAdmin) {
   db.ref("quiz/qIndex").on("value", snap => {
     const qIndex = snap.val();
@@ -189,6 +187,8 @@ if (isAdmin) {
     } else if (qIndex !== null && view === "main") {
       goTo("?quiz");                              // kvissen starta -> kviss-side
     }
+  }, err => {
+    alert("Feil ved lesing av quiz-tilstand: " + err.message);
   });
 }
 
@@ -331,15 +331,24 @@ if (view === "quiz") {
 }
 
 // ===== Kviss-kontroll =====
-function startQuiz() { db.ref("quiz/qIndex").set(0); }
+function startQuiz() {
+  db.ref("quiz/qIndex").set(0)
+    .catch(err => alert("Klarte ikkje å starta kvissen: " + err.message +
+      "\nSjekk at reglane tillater skriving til 'quiz'."));
+}
 function nextQuestion() {
   db.ref("quiz/qIndex").transaction(cur =>
-    (cur === null || cur >= QUESTIONS.length - 1) ? cur : cur + 1);
+    (cur === null || cur >= QUESTIONS.length - 1) ? cur : cur + 1)
+    .catch(err => alert("Klarte ikkje å byta spørsmål: " + err.message));
 }
 function prevQuestion() {
-  db.ref("quiz/qIndex").transaction(cur => (cur === null || cur <= 0) ? cur : cur - 1);
+  db.ref("quiz/qIndex").transaction(cur => (cur === null || cur <= 0) ? cur : cur - 1)
+    .catch(err => alert("Klarte ikkje å byta spørsmål: " + err.message));
 }
-function endQuiz() { db.ref("quiz").remove(); }
+function endQuiz() {
+  db.ref("quiz").remove()
+    .catch(err => alert("Klarte ikkje å avslutta kvissen: " + err.message));
+}
 
 // ===== Påmelding =====
 async function submitName() {
