@@ -9,6 +9,7 @@
 <style>
   * { box-sizing: border-box; font-family: system-ui, sans-serif; }
   body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f5f6fa; color: #222; }
+  #main-wrapper { display: flex; flex-direction: column; align-items: center; gap: 18px; max-width: 90vw; }
   .card { background: #fff; padding: 32px 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.08); text-align: center; max-width: 90vw; }
   h1 { font-size: 22px; margin: 0 0 16px; }
   img.qr { width: 240px; height: 240px; border: 1px solid #ddd; border-radius: 8px; }
@@ -16,18 +17,23 @@
   input.invalid { border-color: #c62828; }
   button { margin-top: 16px; padding: 10px 24px; font-size: 16px; border: none; border-radius: 8px; background: #6d4aff; color: #fff; cursor: pointer; }
   button:hover { background: #5a3ce0; }
-  p.hint { color: #666; font-size: 14px; margin-top: 14px; }
   p.error { color: #c62828; font-size: 14px; margin: 10px 0 0; min-height: 18px; }
   .big { font-size: 26px; font-weight: 600; }
   .sub { font-size: 17px; color: #444; margin-top: 6px; }
 
-  /* Name chip grid */
+  /* Name chip grid — below the QR card */
+  .chip-card {
+    background: #fff;
+    padding: 18px 22px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.06);
+    max-width: 90vw;
+  }
   .chip-grid {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
     gap: 8px;
-    margin-top: 20px;
   }
   .chip {
     display: inline-block;
@@ -39,34 +45,32 @@
     transition: filter .15s, transform .15s;
   }
   .chip:hover { filter: brightness(.88); transform: scale(1.04); }
-  .empty-msg { color: #999; font-size: 14px; margin-top: 18px; }
+  .empty-msg { color: #999; font-size: 14px; margin: 0; }
 </style>
 </head>
 <body>
-<div class="card">
+<div class="card" id="join-view" style="display:none">
+  <h1>Skriv inn namnet ditt</h1>
+  <input id="nameInput" type="text" placeholder="Namnet ditt" maxlength="50" autocomplete="off">
+  <p class="error" id="joinError"></p>
+  <button onclick="submitName()">Bli med</button>
+</div>
 
-  <!-- HOVEDVISNING: QR-kode + påmelde navn -->
-  <div id="main-view" style="display:none">
+<div class="card" id="success-view" style="display:none">
+  <p class="big">Du er påmeldt!</p>
+  <p class="sub" id="successName"></p>
+</div>
+
+<!-- HOVEDVISNING: QR-kort med namneliste under -->
+<div id="main-wrapper" style="display:none">
+  <div class="card">
     <h1>Skann for å bli med</h1>
     <img class="qr" id="qr" alt="QR-kode">
+  </div>
+  <div class="chip-card">
     <div class="chip-grid" id="names"></div>
     <p class="empty-msg" id="emptyMsg">Ingen har blitt med endå.</p>
   </div>
-
-  <!-- PÅMELDINGSVISNING: namn -->
-  <div id="join-view" style="display:none">
-    <h1>Skriv inn namnet ditt</h1>
-    <input id="nameInput" type="text" placeholder="Namnet ditt" maxlength="50" autocomplete="off">
-    <p class="error" id="joinError"></p>
-    <button onclick="submitName()">Bli med</button>
-  </div>
-
-  <!-- SUKSESSVISNING -->
-  <div id="success-view" style="display:none">
-    <p class="big">Du er påmeldt!</p>
-    <p class="sub" id="successName"></p>
-  </div>
-
 </div>
 
 <script>
@@ -108,7 +112,10 @@ if (view === "success") {
   document.getElementById("successName").textContent = name ? "Velkomen, " + name + "!" : "";
 }
 
-document.getElementById(view + "-view").style.display = "block";
+const viewEl = view === "main"
+  ? document.getElementById("main-wrapper")
+  : document.getElementById(view + "-view");
+viewEl.style.display = view === "main" ? "flex" : "block";
 
 // Ryddar eit namn til ein gyldig RTDB-nøkkel (utan . $ # [ ] /),
 // slik at unikskapen er case-uavhengig
