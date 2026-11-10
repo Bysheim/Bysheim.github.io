@@ -12,10 +12,6 @@
   .card { background: #fff; padding: 32px 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.08); text-align: center; max-width: 90vw; }
   h1 { font-size: 22px; margin: 0 0 16px; }
   img.qr { width: 240px; height: 240px; border: 1px solid #ddd; border-radius: 8px; }
-  ul { text-align: left; padding-left: 20px; margin-top: 20px; }
-  li { margin: 4px 0; font-size: 17px; cursor: pointer; border-radius: 6px; padding: 4px 8px 4px 0; transition: background .15s; }
-  li:hover { background: #ffebee; color: #c62828; }
-  li:hover::after { content: " ✕"; font-size: 13px; }
   input { padding: 10px 14px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; width: 100%; max-width: 300px; }
   input.invalid { border-color: #c62828; }
   button { margin-top: 16px; padding: 10px 24px; font-size: 16px; border: none; border-radius: 8px; background: #6d4aff; color: #fff; cursor: pointer; }
@@ -24,6 +20,26 @@
   p.error { color: #c62828; font-size: 14px; margin: 10px 0 0; min-height: 18px; }
   .big { font-size: 26px; font-weight: 600; }
   .sub { font-size: 17px; color: #444; margin-top: 6px; }
+
+  /* Name chip grid */
+  .chip-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .chip {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: filter .15s, transform .15s;
+  }
+  .chip:hover { filter: brightness(.88); transform: scale(1.04); }
+  .empty-msg { color: #999; font-size: 14px; margin-top: 18px; }
 </style>
 </head>
 <body>
@@ -34,7 +50,8 @@
     <h1>Scan to join</h1>
     <img class="qr" id="qr" alt="QR code">
     <p class="hint">Names appear below as people join. Click a name to remove it.</p>
-    <ul id="names"></ul>
+    <div class="chip-grid" id="names"></div>
+    <p class="empty-msg" id="emptyMsg">No one has joined yet.</p>
   </div>
 
   <!-- JOIN VIEW: name prompt -->
@@ -69,8 +86,6 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 // ===== Per-device memory =====
-// Stores the name this device joined with, so a device can only join once
-// and skips the name prompt on every future visit.
 const STORE_KEY = "qr_join_name";
 function getJoinedName() {
   try { return localStorage.getItem(STORE_KEY); } catch (e) { return null; }
@@ -101,26 +116,53 @@ function nameKey(name) {
   return name.toLowerCase().replace(/[.$#[\]/]/g, "").trim();
 }
 
+// ===== Chip colors =====
+// Fixed pastel palette; the name's key is hashed so each name gets a
+// stable "random" color (same for everyone, survives reloads).
+const PALETTE = [
+  ["#FFD6E0", "#8a2c47"], // pink bg, dark pink text
+  ["#FFE8CC", "#8a5514"], // peach
+  ["#FFF6BD", "#7d6a0a"], // yellow
+  ["#D4F0F0", "#14646b"], // teal
+  ["#CCD5FF", "#38418c"], // periwinkle
+  ["#E3D5FF", "#5b359e"], // lavender
+  ["#D8F3DC", "#2b6b38"], // mint
+  ["#FFE0EC", "#a13457"]  // rose
+];
+function chipColor(key) {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length]; // returns [bg, textColor]
+}
+
 // Build the join URL (current page URL + ?join=1), then render QR from it
 if (view === "main") {
   const url = location.origin + location.pathname + "?join=1";
   document.getElementById("qr").src =
     "https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=" + encodeURIComponent(url);
 
-  // Live list of names — click a name to remove it
+  // Live grid of name chips — click a chip to remove it
   db.ref("joins").on("value", snap => {
     const data = snap.val() || {};
-    const list = document.getElementById("names");
-    list.innerHTML = "";
-    Object.entries(data).forEach(([key, entry]) => {
-      const li = document.createElement("li");
-      li.textContent = entry.name;
-      li.title = "Click to remove";
-      li.onclick = () => {
+    const grid = document.getElementById("names");
+    const emptyMsg = document.getElementById("emptyMsg");
+    grid.innerHTML = "";
+    const entries = Object.entries(data);
+    emptyMsg.style.display = entries.length ? "none" : "block";
+
+    entries.forEach(([key, entry]) => {
+      const [bg, fg] = chipColor(key);
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = entry.name;
+      chip.title = "Click to remove";
+      chip.style.background = bg;
+      chip.style.color = fg;
+      chip.onclick = () => {
         db.ref("joins/" + key).remove()
           .catch(err => alert("Could not remove: " + err.message));
       };
-      list.appendChild(li);
+      grid.appendChild(chip);
     });
   });
 }
@@ -133,9 +175,11 @@ async function submitName() {
   input.classList.remove("invalid");
   errorEl.textContent = "";
 
-  if (!name) {
+  // Reject truly empty names: blank input, whitespace-only,
+  // or names made solely of characters that get stripped (e.g. "...").
+  if (!name || !nameKey(name)) {
     input.classList.add("invalid");
-    errorEl.textContent = "Please enter a name.";
+    errorEl.textContent = "Please enter a valid name.";
     return;
   }
 
