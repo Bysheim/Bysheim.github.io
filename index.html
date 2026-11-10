@@ -134,6 +134,15 @@ function nameKey(name) {
   return name.toLowerCase().replace(/[.$#[\]/]/g, "").trim();
 }
 
+// ===== Bfcache-vakt =====
+// Navigerer ein tilbake til sida, kan nettlesaren visa ein frossen
+// snutt (bfcache) utan å kjøra skripta på nytt. Medan sida då er
+// "gjenoppliva" tvingar vi fram ein fersk lasting, slik at
+// ruting og databasekontroll alltid går føre seg på nytt.
+window.addEventListener("pageshow", event => {
+  if (event.persisted) location.reload();
+});
+
 // ===== Rutinging basert på URL-parametrar =====
 const params = new URLSearchParams(location.search);
 let view = params.get("join") ? "join" : params.get("success") ? "success" : "main";
