@@ -28,6 +28,8 @@
   button:hover { background: #5a3ce0; }
   button.secondary { background: #fff; color: #6d4aff; border: 1px solid #6d4aff; }
   button.secondary:hover { background: #f0ecff; }
+  button.danger { background: #c62828; color: #fff; }
+  button.danger:hover { background: #a81f1f; }
   button.small { margin: 6px 4px 0; padding: 8px 16px; font-size: 14px; }
   button.start {
     margin: 0; padding: 20px 48px; font-size: 26px; font-weight: 700;
@@ -97,7 +99,7 @@
   <div>
     <button class="small" onclick="prevQuestion()">&#8592; Førre</button>
     <button class="small" onclick="nextQuestion()">Neste &#8594;</button>
-    <button class="small secondary" onclick="endQuiz()">Avslutt kvissen</button>
+    <button class="small danger" onclick="endQuiz()">Avbryt kvissen</button>
   </div>
 </div>
 
@@ -133,6 +135,7 @@ const db = firebase.database();
 // ===== Per-eininga-lager =====
 const STORE_NAME = "qr_join_name";
 const STORE_DEVICE = "qr_join_device";
+const STORE_ADMIN = "qr_is_admin";
 function lsGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 function lsSet(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
 function lsDel(keys) { try { keys.forEach(k => localStorage.removeItem(k)); } catch (e) {} }
@@ -156,10 +159,17 @@ window.addEventListener("pageshow", event => {
 
 // ===== Rutinging basert på URL-parametrar =====
 const params = new URLSearchParams(location.search);
-const isAdmin = !params.toString();            // inga parametrar = hovudside
-const answerIdx = params.get("answer");         // ?answer=N = svarside
+const onBareRoot = !params.toString();           // rotsida = hovudside
+
+// Admin-status blir lagra på eininga, så han overlever navigasjon
+// mellom hovudsida og kviss-sida (begge har parametrar eller ikkje).
+if (onBareRoot) lsSet(STORE_ADMIN, "1");
+const isAdmin = onBareRoot || params.get("quiz") !== null && lsGet(STORE_ADMIN) === "1";
+
+const answerIdx = params.get("answer");          // ?answer=N = svarside
 let view = params.get("join") ? "join"
          : params.get("success") ? "success"
+         : isAdmin && params.get("quiz") !== null ? "quiz"
          : answerIdx !== null ? "answer"
          : "main";
 
@@ -167,15 +177,17 @@ const myDevice = getDeviceId();
 
 function goTo(query) { location.replace(location.pathname + query); }
 
-// Admin-eininga: kortet "?" betyr ventemodus, eit tal betyr kviss-side.
-// Endring skjer automatisk utan reload.
+// Admin-eininga: følgjer kviss-tilstanden — til kviss-sida når han
+// startar, attende til hovudsida når han avsluttast. Gjeld òg
+// ved reload, sidan tilstanden kjem frå databasen og flagget frå
+// lokal lagring.
 if (isAdmin) {
   db.ref("quiz/qIndex").on("value", snap => {
     const qIndex = snap.val();
     if (qIndex === null && view !== "main") {
-      goTo("");                                  // kvissen avslutta -> QR-side
+      goTo("");                                   // kvissen avslutta -> QR-side
     } else if (qIndex !== null && view === "main") {
-      goTo("?quiz");                             // kvissen starta -> kviss-side
+      goTo("?quiz");                              // kvissen starta -> kviss-side
     }
   });
 }
@@ -188,7 +200,7 @@ if (!isAdmin && getJoinedName()) {
     if (view !== "answer") {
       goTo("?answer=" + qIndex);
     } else if (String(qIndex) !== answerIdx) {
-      goTo("?answer=" + qIndex);                 // nytt spørsmål
+      goTo("?answer=" + qIndex);                  // nytt spørsmål
     }
   });
 }
@@ -264,7 +276,7 @@ if (view === "success") {
 
 const viewEl = view === "main"
   ? document.getElementById("main-wrapper")
-  : document.getElementById(view === "quiz" ? "quiz-view" : view + "-view");
+  : document.getElementById(view + "-view");
 viewEl.style.display = view === "main" ? "flex" : "block";
 
 // ===== Chip-fargar =====
