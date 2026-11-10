@@ -13,11 +13,15 @@
   h1 { font-size: 22px; margin: 0 0 16px; }
   img.qr { width: 240px; height: 240px; border: 1px solid #ddd; border-radius: 8px; }
   ul { text-align: left; padding-left: 20px; margin-top: 20px; }
-  li { margin: 4px 0; font-size: 17px; }
+  li { margin: 4px 0; font-size: 17px; cursor: pointer; border-radius: 6px; padding: 4px 8px 4px 0; transition: background .15s; }
+  li:hover { background: #ffebee; color: #c62828; }
+  li:hover::after { content: " ✕"; font-size: 13px; }
   input { padding: 10px 14px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; width: 100%; max-width: 300px; }
+  input.invalid { border-color: #c62828; }
   button { margin-top: 16px; padding: 10px 24px; font-size: 16px; border: none; border-radius: 8px; background: #6d4aff; color: #fff; cursor: pointer; }
   button:hover { background: #5a3ce0; }
   p.hint { color: #666; font-size: 14px; margin-top: 14px; }
+  p.error { color: #c62828; font-size: 14px; margin: 10px 0 0; min-height: 18px; }
   .big { font-size: 26px; font-weight: 600; }
 </style>
 </head>
@@ -28,7 +32,7 @@
   <div id="main-view" style="display:none">
     <h1>Scan to join</h1>
     <img class="qr" id="qr" alt="QR code">
-    <p class="hint">Names appear below as people join.</p>
+    <p class="hint">Names appear below as people join. Click a name to remove it.</p>
     <ul id="names"></ul>
   </div>
 
@@ -36,7 +40,7 @@
   <div id="join-view" style="display:none">
     <h1>Enter your name</h1>
     <input id="nameInput" type="text" placeholder="Your name" maxlength="50" autocomplete="off">
-    <br>
+    <p class="error" id="joinError"></p>
     <button onclick="submitName()">Join</button>
   </div>
 
@@ -67,32 +71,67 @@ const params = new URLSearchParams(location.search);
 const view = params.get("join") ? "join" : params.get("success") ? "success" : "main";
 document.getElementById(view + "-view").style.display = "block";
 
+// Sanitize a name into a valid RTDB key (no . $ # [ ] /), keeps case-insensitive uniqueness
+function nameKey(name) {
+  return name.toLowerCase().replace(/[.$#[\]/]/g, "").trim();
+}
+
 // Build the join URL (current page URL + ?join=1), then render QR from it
 if (view === "main") {
   const url = location.origin + location.pathname + "?join=1";
   document.getElementById("qr").src =
     "https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=" + encodeURIComponent(url);
 
-  // Live list of names
+  // Live list of names — click a name to remove it
   db.ref("joins").on("value", snap => {
     const data = snap.val() || {};
     const list = document.getElementById("names");
     list.innerHTML = "";
-    Object.values(data).forEach(entry => {
+    Object.entries(data).forEach(([key, entry]) => {
       const li = document.createElement("li");
       li.textContent = entry.name;
+      li.title = "Click to remove";
+      li.onclick = () => {
+        db.ref("joins/" + key).remove()
+          .catch(err => alert("Could not remove: " + err.message));
+      };
       list.appendChild(li);
     });
   });
 }
 
 // ===== Join submission =====
-function submitName() {
-  const name = document.getElementById("nameInput").value.trim();
-  if (!name) { alert("Please enter a name."); return; }
-  db.ref("joins").push({ name: name, time: Date.now() })
-    .then(() => { location.href = location.pathname + "?success=1"; })
-    .catch(err => alert("Something went wrong: " + err.message));
+async function submitName() {
+  const input = document.getElementById("nameInput");
+  const errorEl = document.getElementById("joinError");
+  const name = input.value.trim();
+  input.classList.remove("invalid");
+  errorEl.textContent = "";
+
+  if (!name) {
+    input.classList.add("invalid");
+    errorEl.textContent = "Please enter a name.";
+    return;
+  }
+
+  try {
+    // Transaction guarantees the check and write happen atomically,
+    // so two people submitting the same name at the same time can't both win.
+    const result = await db.ref("joins/" + nameKey(name)).transaction(current => {
+      if (current) return;               // already taken -> abort transaction
+      return { name: name, time: Date.now() };
+    });
+
+    if (!result.committed) {
+      input.classList.add("invalid");
+      errorEl.textContent = "That name has already been entered. Try another one.";
+      input.select();
+      return;
+    }
+    location.href = location.pathname + "?success=1";
+  } catch (err) {
+    errorEl.textContent = "Something went wrong: " + err.message;
+  }
 }
 
 // Enter key submits too
@@ -102,4 +141,3 @@ document.getElementById("nameInput")?.addEventListener("keydown", e => {
 </script>
 </body>
 </html>
-
