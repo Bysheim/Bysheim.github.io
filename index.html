@@ -12,74 +12,68 @@
     margin: 0; min-height: 100vh;
     display: flex; align-items: center; justify-content: center;
     background: #f5f6fa; color: #222;
-    -webkit-user-select: none;    /* ikkje mogleg å merkera tekst */
-    user-select: none;
-    caret-color: transparent;     /* ingen blinkande skrivemerkje */
+    -webkit-user-select: none; user-select: none; caret-color: transparent;
   }
   #main-wrapper { display: flex; flex-direction: column; align-items: center; gap: 18px; max-width: 90vw; }
-  .card { background: #fff; padding: 32px 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.08); text-align: center; max-width: 90vw; }
+  .card { background: #fff; padding: 32px 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.08); text-align: center; max-width: 90vw; width: 100%; }
   h1 { font-size: 22px; margin: 0 0 16px; }
   img.qr { width: 240px; height: 240px; border: 1px solid #ddd; border-radius: 8px; }
   input {
     padding: 10px 14px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px;
     width: 100%; max-width: 300px;
-    -webkit-user-select: text;    /* tekstfeltet skal framleis vera skrivebart */
-    user-select: text;
-    caret-color: auto;
+    -webkit-user-select: text; user-select: text; caret-color: auto;
   }
   input.invalid { border-color: #c62828; }
   button { margin-top: 16px; padding: 10px 24px; font-size: 16px; border: none; border-radius: 8px; background: #6d4aff; color: #fff; cursor: pointer; }
   button:hover { background: #5a3ce0; }
   button.secondary { background: #fff; color: #6d4aff; border: 1px solid #6d4aff; }
   button.secondary:hover { background: #f0ecff; }
+  button.small { margin: 6px 4px 0; padding: 8px 16px; font-size: 14px; }
   p.error { color: #c62828; font-size: 14px; margin: 10px 0 0; min-height: 18px; }
+  p.hint { color: #666; font-size: 14px; margin: 14px 0 0; }
   .big { font-size: 26px; font-weight: 600; }
   .sub { font-size: 17px; color: #444; margin-top: 6px; }
 
   /* Name chip grid — below the QR card */
-  .chip-card {
-    background: #fff;
-    padding: 18px 22px;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,.06);
-    max-width: 90vw;
-  }
-  .chip-grid {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px;
-  }
+  .chip-card { background: #fff; padding: 18px 22px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.06); max-width: 90vw; }
+  .chip-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
   .chip {
-    display: inline-block;
-    padding: 8px 16px;
-    border-radius: 999px;
-    font-size: 15px;
-    font-weight: 500;
-    cursor: pointer;
+    display: inline-block; padding: 8px 16px; border-radius: 999px;
+    font-size: 15px; font-weight: 500; cursor: pointer;
     transition: filter .15s, transform .15s;
   }
   .chip:hover { filter: brightness(.88); transform: scale(1.04); }
   .empty-msg { color: #999; font-size: 14px; margin: 0; }
+
+  /* Answer page */
+  .options { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+  .option {
+    padding: 14px 18px; border-radius: 10px; border: 2px solid #ddd;
+    font-size: 17px; cursor: pointer; transition: all .15s; background: #fff;
+  }
+  .option:hover { border-color: #6d4aff; background: #f4f0ff; }
+  .option.chosen { border-color: #6d4aff; background: #ece5ff; font-weight: 600; }
+  .answered-msg { color: #2b6b38; font-size: 15px; margin-top: 14px; min-height: 20px; }
 </style>
 </head>
 <body>
-<div class="card" id="join-view" style="display:none">
+<div class="card" id="join-view" style="display:none; max-width:400px;">
   <h1>Skriv inn namnet ditt</h1>
   <input id="nameInput" type="text" placeholder="Namnet ditt" maxlength="50" autocomplete="off">
   <p class="error" id="joinError"></p>
   <button onclick="submitName()">Bli med</button>
 </div>
 
-<div class="card" id="success-view" style="display:none">
+<div class="card" id="success-view" style="display:none; max-width:400px;">
   <p class="big">Du er påmeldt!</p>
   <p class="sub" id="successName"></p>
   <button class="secondary" onclick="leave()">Meld meg av</button>
+  <p class="hint">Sida ventar på at kvissen startar…</p>
 </div>
 
-<!-- HOVEDVISNING: QR-kort med namneliste under -->
+<!-- HOVEDVISNING (admin): QR-kort, namneliste, kvissstyring -->
 <div id="main-wrapper" style="display:none">
-  <div class="card">
+  <div class="card" style="max-width: 360px;">
     <h1>Skann for å bli med</h1>
     <img class="qr" id="qr" alt="QR-kode">
   </div>
@@ -87,9 +81,34 @@
     <div class="chip-grid" id="names"></div>
     <p class="empty-msg" id="emptyMsg">Ingen har blitt med endå.</p>
   </div>
+  <div class="card" id="quiz-admin" style="max-width: 360px;">
+    <button onclick="startQuiz()" id="startBtn">Start kviss!</button>
+    <div id="quizControls" style="display:none">
+      <h1 id="quizProgress"></h1>
+      <p id="quizQuestion" style="font-size: 18px; margin: 8px 0;"></p>
+      <button class="small" onclick="prevQuestion()">&#8592; Førre</button>
+      <button class="small" onclick="nextQuestion()">Neste &#8594;</button>
+      <button class="small secondary" onclick="endQuiz()">Avslutt kvissen</button>
+      <p class="hint">Alle einingar følgjer med automatisk.</p>
+    </div>
+  </div>
+</div>
+
+<!-- SVARSIDE -->
+<div class="card" id="answer-view" style="display:none; max-width:420px;">
+  <p class="hint" id="answerProgress"></p>
+  <p class="big" id="answerQuestion"></p>
+  <div class="options" id="answerOptions"></div>
+  <p class="answered-msg" id="answeredMsg"></p>
 </div>
 
 <script>
+// ===== Spørsmål — REDIGER DENNE LISTA =====
+const QUESTIONS = [
+  { text: "Kva er hovudstaden i Noreg?", options: ["Oslo", "Bergen", "Trondheim", "Stavanger"] },
+  { text: "Kor mange bein har ein edderkopp?", options: ["6", "8", "10", "4"] }
+];
+
 // ===== Firebase-oppsett =====
 const firebaseConfig = {
   apiKey: "AIzaSyBSpDow4pLHjOBknB2EMeGMSSUJGy7DyYE",
@@ -107,65 +126,119 @@ const db = firebase.database();
 // ===== Per-eininga-lager =====
 const STORE_NAME = "qr_join_name";
 const STORE_DEVICE = "qr_join_device";
-function lsGet(key) {
-  try { return localStorage.getItem(key); } catch (e) { return null; }
-}
-function lsSet(key, val) {
-  try { localStorage.setItem(key, val); } catch (e) {}
-}
-function lsDel(keys) {
-  try { keys.forEach(k => localStorage.removeItem(k)); } catch (e) {}
-}
+function lsGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+function lsSet(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+function lsDel(keys) { try { keys.forEach(k => localStorage.removeItem(k)); } catch (e) {} }
 function getDeviceId() {
   let id = lsGet(STORE_DEVICE);
-  if (!id) {
-    id = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    lsSet(STORE_DEVICE, id);
-  }
+  if (!id) { id = Math.random().toString(36).slice(2) + Date.now().toString(36); lsSet(STORE_DEVICE, id); }
   return id;
 }
 function getJoinedName() { return lsGet(STORE_NAME); }
 function setJoinedName(name) { lsSet(STORE_NAME, name); }
 function forgetJoin() { lsDel([STORE_NAME]); }
 
-// Ryddar eit namn til ein gyldig RTDB-nøkkel (utan . $ # [ ] /),
-// slik at unikskapen er case-uavhengig
 function nameKey(name) {
   return name.toLowerCase().replace(/[.$#[\]/]/g, "").trim();
 }
 
 // ===== Bfcache-vakt =====
-// Navigerer ein tilbake til sida, kan nettlesaren visa ein frossen
-// snutt (bfcache) utan å kjøra skripta på nytt. Medan sida då er
-// "gjenoppliva" tvingar vi fram ein fersk lasting, slik at
-// ruting og databasekontroll alltid går føre seg på nytt.
 window.addEventListener("pageshow", event => {
   if (event.persisted) location.reload();
 });
 
 // ===== Rutinging basert på URL-parametrar =====
 const params = new URLSearchParams(location.search);
-let view = params.get("join") ? "join" : params.get("success") ? "success" : "main";
+const isAdmin = !params.toString();            // inga parametrar = hovudsida
+const answerIdx = params.get("answer");         // ?answer=N = svarside
+let view = params.get("join") ? "join"
+         : params.get("success") ? "success"
+         : answerIdx !== null ? "answer"
+         : "main";
+
+const myDevice = getDeviceId();
+
+// Folk som er på drift (admin) skal ALDRI styrast til svarsida —
+// alle andre følgjer quiz-tilstanden.
+function goTo(pathWithQuery) {
+  location.replace(location.pathname + pathWithQuery);
+}
+
+// Levande lyttar på kviss-tilstanden: alle ikkje-admin-einingar blir
+// flytta dit kvissen er, både ved oppstart og ved endringar.
+if (!isAdmin) {
+  db.ref("quiz/qIndex").on("value", snap => {
+    const qIndex = snap.val();
+    if (qIndex === null) return;               // ingen kviss pågår — blir verande
+    if (view !== "answer") {
+      goTo("?answer=" + qIndex);
+    } else if (String(qIndex) !== answerIdx) {
+      goTo("?answer=" + qIndex);                // nytt spørsmål
+    }
+  });
+}
+
+// Svarside: vis spørsmål og alternativ, registrer svar
+if (view === "answer") {
+  const idx = parseInt(answerIdx, 10);
+  const q = QUESTIONS[idx];
+
+  // Spørsmålet kan ha endra seg medan sida var open — følg med
+  if (!q) {
+    db.ref("quiz/qIndex").on("value", snap => {
+      const cur = snap.val();
+      if (cur === null) goTo("?join=1"); else if (cur !== idx) goTo("?answer=" + cur);
+    });
+  } else {
+    document.getElementById("answerProgress").textContent = "Spørsmål " + (idx + 1) + " av " + QUESTIONS.length;
+    document.getElementById("answerQuestion").textContent = q.text;
+
+    const optsEl = document.getElementById("answerOptions");
+    const msgEl = document.getElementById("answeredMsg");
+
+    // Vis evt. allereie avgjeve svar (t.d. etter attendenavigering)
+    const myAnswerRef = db.ref("answers/q" + idx + "/" + myDevice);
+    let previouslyChosen = null;
+
+    q.options.forEach((opt, i) => {
+      const btn = document.createElement("div");
+      btn.className = "option";
+      btn.textContent = opt;
+      btn.onclick = () => {
+        myAnswerRef.set({ option: i, time: Date.now() })
+          .then(() => {
+            document.querySelectorAll(".option").forEach(o => o.classList.remove("chosen"));
+            btn.classList.add("chosen");
+            msgEl.textContent = "Svaret ditt er registrert!";
+          })
+          .catch(err => { msgEl.style.color = "#c62828"; msgEl.textContent = "Klarte ikkje å lagra: " + err.message; });
+      };
+      optsEl.appendChild(btn);
+    });
+
+    myAnswerRef.on("value", snap => {
+      previouslyChosen = snap.exists() ? snap.val().option : null;
+      if (previouslyChosen !== null) {
+        document.querySelectorAll(".option")[previouslyChosen]?.classList.add("chosen");
+        msgEl.textContent = "Svaret ditt er registrert!";
+      }
+    });
+  }
+}
 
 // Eininga har allereie blitt med? Hopp rett til suksessvisninga.
 if (view === "join" && getJoinedName()) {
   location.replace(location.pathname + "?success=1");
 }
 
-// Suksessvisning: helsing + kontrollert, levande vakthald over eigen post.
+// Suksessvisning: helsing + levande vakthald over eigen post.
 if (view === "success") {
   const name = getJoinedName();
   if (!name) {
-    // Ingen lagra namn -> tilbake til påmelding
     location.replace(location.pathname + "?join=1");
   } else {
     document.getElementById("successName").textContent = "Velkomen, " + name + "!";
-
-    // Ein post gjeld berre om ho finnast OG høyrer til denne eininga.
-    // Er ho borte (fjerna frå hovudsida) eller teken av ei anna eining,
-    // blir den lokale namnehukommelsen sletta og brukaren sendt til påmeldinga.
     const myKey = "joins/" + nameKey(name);
-    const myDevice = getDeviceId();
     db.ref(myKey).on("value", snap => {
       const entry = snap.val();
       if (!entry || entry.device !== myDevice) {
@@ -184,31 +257,24 @@ const viewEl = view === "main"
 viewEl.style.display = view === "main" ? "flex" : "block";
 
 // ===== Chip-fargar =====
-// Fast palett; namnenøkkelen blir hash'a slik at kvart namn får
-// ei stabil "tilfeldig" farge (den same for alle, halder etter oppdateringar).
 const PALETTE = [
-  ["#FFD6E0", "#8a2c47"], // rosa bakgrunn, mørk rosa tekst
-  ["#FFE8CC", "#8a5514"], // fersken
-  ["#FFF6BD", "#7d6a0a"], // gul
-  ["#D4F0F0", "#14646b"], // turkis
-  ["#CCD5FF", "#38418c"], // periwinkle
-  ["#E3D5FF", "#5b359e"], // lavendel
-  ["#D8F3DC", "#2b6b38"], // mynte
-  ["#FFE0EC", "#a13457"]  // rose
+  ["#FFD6E0", "#8a2c47"], ["#FFE8CC", "#8a5514"], ["#FFF6BD", "#7d6a0a"],
+  ["#D4F0F0", "#14646b"], ["#CCD5FF", "#38418c"], ["#E3D5FF", "#5b359e"],
+  ["#D8F3DC", "#2b6b38"], ["#FFE0EC", "#a13457"]
 ];
 function chipColor(key) {
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  return PALETTE[h % PALETTE.length]; // returnerer [bakgrunn, tekstfarge]
+  return PALETTE[h % PALETTE.length];
 }
 
-// Bygg påmeldings-URL (denne sida + ?join=1), og teikna QR-koden frå den
+// ===== Hovudsida (admin) =====
 if (view === "main") {
   const url = location.origin + location.pathname + "?join=1";
   document.getElementById("qr").src =
     "https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=" + encodeURIComponent(url);
 
-  // Levande rutenett av namne-chips — klikk på ein chip for å fjerna han
+  // Levande namneliste
   db.ref("joins").on("value", snap => {
     const data = snap.val() || {};
     const grid = document.getElementById("names");
@@ -216,7 +282,6 @@ if (view === "main") {
     grid.innerHTML = "";
     const entries = Object.entries(data);
     emptyMsg.style.display = entries.length ? "none" : "block";
-
     entries.forEach(([key, entry]) => {
       const [bg, fg] = chipColor(key);
       const chip = document.createElement("span");
@@ -225,14 +290,35 @@ if (view === "main") {
       chip.title = "Klikk for å fjerna";
       chip.style.background = bg;
       chip.style.color = fg;
-      chip.onclick = () => {
-        db.ref("joins/" + key).remove()
-          .catch(err => alert("Klarte ikkje å fjerna: " + err.message));
-      };
+      chip.onclick = () => db.ref("joins/" + key).remove()
+        .catch(err => alert("Klarte ikkje å fjerna: " + err.message));
       grid.appendChild(chip);
     });
   });
+
+  // Kviss-styring: følg med på tilstanden så adminsida er i sync
+  db.ref("quiz/qIndex").on("value", snap => {
+    const qIndex = snap.val();
+    const running = qIndex !== null;
+    document.getElementById("startBtn").style.display = running ? "none" : "block";
+    document.getElementById("quizControls").style.display = running ? "block" : "none";
+    if (running) {
+      document.getElementById("quizProgress").textContent = "Spørsmål " + (qIndex + 1) + " av " + QUESTIONS.length;
+      document.getElementById("quizQuestion").textContent = QUESTIONS[qIndex].text;
+    }
+  });
 }
+
+// ===== Kviss-kontroll (hovudeininga) =====
+function startQuiz() { db.ref("quiz/qIndex").set(0); }
+function nextQuestion() {
+  db.ref("quiz/qIndex").transaction(cur =>
+    (cur === null || cur >= QUESTIONS.length - 1) ? cur : cur + 1);
+}
+function prevQuestion() {
+  db.ref("quiz/qIndex").transaction(cur => (cur === null || cur <= 0) ? cur : cur - 1);
+}
+function endQuiz() { db.ref("quiz").remove(); }
 
 // ===== Påmelding =====
 async function submitName() {
@@ -242,31 +328,22 @@ async function submitName() {
   input.classList.remove("invalid");
   errorEl.textContent = "";
 
-  // Avvis namn som er tomme: blank input, berre mellomrom,
-  // eller namn som berre består av teikn som blir fjerna (t.d. "...").
   if (!name || !nameKey(name)) {
     input.classList.add("invalid");
     errorEl.textContent = "Skriv inn eit gyldig namn.";
     return;
   }
 
-  const myDevice = getDeviceId();
-
   try {
-    // Transaksjonen garanterer at sjekk og skriving skjer atomisk.
-    // - Fritt namn -> skriv med kopling til denne eininga.
-    // - Namnet finst frå før på SAME eining -> ingen endring (idempotent).
-    // - Namnet finst frå før på ei ANNA eining -> avbryt (namnet er teke).
     const result = await db.ref("joins/" + nameKey(name)).transaction(current => {
-      if (current && current.device === myDevice) return; // eigentleg min post
-      if (current) return;                                 // teke av ei anna eining
+      if (current && current.device === myDevice) return;
+      if (current) return;
       return { name: name, time: Date.now(), device: myDevice };
     });
 
     if (!result.committed) {
       const current = result.snapshot.val();
       if (current && current.device === myDevice) {
-        // Posten høyrer allereie til denne eininga -> gå til suksess
         setJoinedName(name);
         location.href = location.pathname + "?success=1";
         return;
@@ -276,7 +353,7 @@ async function submitName() {
       input.select();
       return;
     }
-    setJoinedName(name);                 // lås denne eininga til dette namnet
+    setJoinedName(name);
     location.href = location.pathname + "?success=1";
   } catch (err) {
     errorEl.textContent = "Noko gjekk gale: " + err.message;
@@ -289,8 +366,7 @@ async function leave() {
   try {
     if (name) {
       const snap = await db.ref("joins/" + nameKey(name)).get();
-      // Berre fjern posten om ho faktisk høyrer til denne eininga
-      if (snap.exists() && snap.val().device === getDeviceId()) {
+      if (snap.exists() && snap.val().device === myDevice) {
         await db.ref("joins/" + nameKey(name)).remove();
       }
     }
