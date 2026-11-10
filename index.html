@@ -29,9 +29,15 @@
   button.secondary { background: #fff; color: #6d4aff; border: 1px solid #6d4aff; }
   button.secondary:hover { background: #f0ecff; }
   button.small { margin: 6px 4px 0; padding: 8px 16px; font-size: 14px; }
+  button.start {
+    margin: 0; padding: 20px 48px; font-size: 26px; font-weight: 700;
+    border-radius: 14px; box-shadow: 0 6px 24px rgba(109,74,255,.35);
+  }
+  button.start:hover { background: #5a3ce0; transform: translateY(-1px); }
   p.error { color: #c62828; font-size: 14px; margin: 10px 0 0; min-height: 18px; }
   p.hint { color: #666; font-size: 14px; margin: 14px 0 0; }
   .big { font-size: 26px; font-weight: 600; }
+  .huge { font-size: 34px; font-weight: 700; margin: 0; }
   .sub { font-size: 17px; color: #444; margin-top: 6px; }
 
   /* Name chip grid — below the QR card */
@@ -71,7 +77,7 @@
   <p class="hint">Sida ventar på at kvissen startar…</p>
 </div>
 
-<!-- HOVEDVISNING (admin): QR-kort, namneliste, kvissstyring -->
+<!-- HOVUDVISNING, VENTEMODUS (admin): QR-kort + namneliste + stor startknapp -->
 <div id="main-wrapper" style="display:none">
   <div class="card" style="max-width: 360px;">
     <h1>Skann for å bli med</h1>
@@ -81,16 +87,17 @@
     <div class="chip-grid" id="names"></div>
     <p class="empty-msg" id="emptyMsg">Ingen har blitt med endå.</p>
   </div>
-  <div class="card" id="quiz-admin" style="max-width: 360px;">
-    <button onclick="startQuiz()" id="startBtn">Start kviss!</button>
-    <div id="quizControls" style="display:none">
-      <h1 id="quizProgress"></h1>
-      <p id="quizQuestion" style="font-size: 18px; margin: 8px 0;"></p>
-      <button class="small" onclick="prevQuestion()">&#8592; Førre</button>
-      <button class="small" onclick="nextQuestion()">Neste &#8594;</button>
-      <button class="small secondary" onclick="endQuiz()">Avslutt kvissen</button>
-      <p class="hint">Alle einingar følgjer med automatisk.</p>
-    </div>
+  <button class="start" onclick="startQuiz()">Start kviss!</button>
+</div>
+
+<!-- KVISS-SIDE (admin): eiga side med spørsmål og kontroll -->
+<div class="card" id="quiz-view" style="display:none; max-width:480px;">
+  <p class="hint" id="quizProgress" style="margin-top:0;"></p>
+  <p class="huge" id="quizQuestion"></p>
+  <div>
+    <button class="small" onclick="prevQuestion()">&#8592; Førre</button>
+    <button class="small" onclick="nextQuestion()">Neste &#8594;</button>
+    <button class="small secondary" onclick="endQuiz()">Avslutt kvissen</button>
   </div>
 </div>
 
@@ -149,7 +156,7 @@ window.addEventListener("pageshow", event => {
 
 // ===== Rutinging basert på URL-parametrar =====
 const params = new URLSearchParams(location.search);
-const isAdmin = !params.toString();            // inga parametrar = hovudsida
+const isAdmin = !params.toString();            // inga parametrar = hovudside
 const answerIdx = params.get("answer");         // ?answer=N = svarside
 let view = params.get("join") ? "join"
          : params.get("success") ? "success"
@@ -160,17 +167,28 @@ const myDevice = getDeviceId();
 
 function goTo(query) { location.replace(location.pathname + query); }
 
+// Admin-eininga: kortet "?" betyr ventemodus, eit tal betyr kviss-side.
+// Endring skjer automatisk utan reload.
+if (isAdmin) {
+  db.ref("quiz/qIndex").on("value", snap => {
+    const qIndex = snap.val();
+    if (qIndex === null && view !== "main") {
+      goTo("");                                  // kvissen avslutta -> QR-side
+    } else if (qIndex !== null && view === "main") {
+      goTo("?quiz");                             // kvissen starta -> kviss-side
+    }
+  });
+}
+
 // Berre einingar som HAR BLITT MED (namn i localStorage) følgjer kvissen.
-// Utan namn blir ein verande i påmeldingsflyten til namnet er oppgjeve;
-// etterpå blir ein trekka rett til gjeldande spørsmål.
 if (!isAdmin && getJoinedName()) {
   db.ref("quiz/qIndex").on("value", snap => {
     const qIndex = snap.val();
-    if (qIndex === null) return;               // ingen kviss pågår — blir verande
+    if (qIndex === null) return;                 // ingen kviss pågår — blir verande
     if (view !== "answer") {
       goTo("?answer=" + qIndex);
     } else if (String(qIndex) !== answerIdx) {
-      goTo("?answer=" + qIndex);                // nytt spørsmål
+      goTo("?answer=" + qIndex);                 // nytt spørsmål
     }
   });
 }
@@ -181,7 +199,6 @@ if (view === "answer") {
   const q = QUESTIONS[idx];
 
   if (!q) {
-    // Spørsmålet finst ikkje (t.d. gammal indeks) — følg quiz-tilstanden
     db.ref("quiz/qIndex").on("value", snap => {
       const cur = snap.val();
       if (cur === null) goTo(getJoinedName() ? "?success=1" : "?join=1");
@@ -193,7 +210,6 @@ if (view === "answer") {
 
     const optsEl = document.getElementById("answerOptions");
     const msgEl = document.getElementById("answeredMsg");
-
     const myAnswerRef = db.ref("answers/q" + idx + "/" + myDevice);
 
     q.options.forEach(opt => {
@@ -212,7 +228,6 @@ if (view === "answer") {
       optsEl.appendChild(btn);
     });
 
-    // Vis evt. tidlegare svar (t.d. etter attendenavigering)
     myAnswerRef.on("value", snap => {
       if (snap.exists()) {
         document.querySelectorAll(".option")[snap.val().option]?.classList.add("chosen");
@@ -249,7 +264,7 @@ if (view === "success") {
 
 const viewEl = view === "main"
   ? document.getElementById("main-wrapper")
-  : document.getElementById(view + "-view");
+  : document.getElementById(view === "quiz" ? "quiz-view" : view + "-view");
 viewEl.style.display = view === "main" ? "flex" : "block";
 
 // ===== Chip-fargar =====
@@ -264,13 +279,12 @@ function chipColor(key) {
   return PALETTE[h % PALETTE.length];
 }
 
-// ===== Hovudsida (admin) =====
+// ===== Ventemodus (hovedsida): QR + namneliste =====
 if (view === "main") {
   const url = location.origin + location.pathname + "?join=1";
   document.getElementById("qr").src =
     "https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=" + encodeURIComponent(url);
 
-  // Levande namneliste
   db.ref("joins").on("value", snap => {
     const data = snap.val() || {};
     const grid = document.getElementById("names");
@@ -291,21 +305,20 @@ if (view === "main") {
       grid.appendChild(chip);
     });
   });
+}
 
-  // Kviss-styring: følg med på tilstanden så adminsida er i sync
+// ===== Kviss-side (admin) =====
+if (view === "quiz") {
   db.ref("quiz/qIndex").on("value", snap => {
     const qIndex = snap.val();
-    const running = qIndex !== null;
-    document.getElementById("startBtn").style.display = running ? "none" : "block";
-    document.getElementById("quizControls").style.display = running ? "block" : "none";
-    if (running) {
-      document.getElementById("quizProgress").textContent = "Spørsmål " + (qIndex + 1) + " av " + QUESTIONS.length;
-      document.getElementById("quizQuestion").textContent = QUESTIONS[qIndex].text;
-    }
+    if (qIndex === null) return;                 // avslutta — lyttaren tar over rutinga
+    document.getElementById("quizProgress").textContent =
+      "Spørsmål " + (qIndex + 1) + " av " + QUESTIONS.length;
+    document.getElementById("quizQuestion").textContent = QUESTIONS[qIndex].text;
   });
 }
 
-// ===== Kviss-kontroll (hovudeininga) =====
+// ===== Kviss-kontroll =====
 function startQuiz() { db.ref("quiz/qIndex").set(0); }
 function nextQuestion() {
   db.ref("quiz/qIndex").transaction(cur =>
