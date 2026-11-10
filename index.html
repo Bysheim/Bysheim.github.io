@@ -158,15 +158,12 @@ let view = params.get("join") ? "join"
 
 const myDevice = getDeviceId();
 
-// Folk som er på drift (admin) skal ALDRI styrast til svarsida —
-// alle andre følgjer quiz-tilstanden.
-function goTo(pathWithQuery) {
-  location.replace(location.pathname + pathWithQuery);
-}
+function goTo(query) { location.replace(location.pathname + query); }
 
-// Levande lyttar på kviss-tilstanden: alle ikkje-admin-einingar blir
-// flytta dit kvissen er, både ved oppstart og ved endringar.
-if (!isAdmin) {
+// Berre einingar som HAR BLITT MED (namn i localStorage) følgjer kvissen.
+// Utan namn blir ein verande i påmeldingsflyten til namnet er oppgjeve;
+// etterpå blir ein trekka rett til gjeldande spørsmål.
+if (!isAdmin && getJoinedName()) {
   db.ref("quiz/qIndex").on("value", snap => {
     const qIndex = snap.val();
     if (qIndex === null) return;               // ingen kviss pågår — blir verande
@@ -183,11 +180,12 @@ if (view === "answer") {
   const idx = parseInt(answerIdx, 10);
   const q = QUESTIONS[idx];
 
-  // Spørsmålet kan ha endra seg medan sida var open — følg med
   if (!q) {
+    // Spørsmålet finst ikkje (t.d. gammal indeks) — følg quiz-tilstanden
     db.ref("quiz/qIndex").on("value", snap => {
       const cur = snap.val();
-      if (cur === null) goTo("?join=1"); else if (cur !== idx) goTo("?answer=" + cur);
+      if (cur === null) goTo(getJoinedName() ? "?success=1" : "?join=1");
+      else if (cur !== idx) goTo("?answer=" + cur);
     });
   } else {
     document.getElementById("answerProgress").textContent = "Spørsmål " + (idx + 1) + " av " + QUESTIONS.length;
@@ -196,16 +194,14 @@ if (view === "answer") {
     const optsEl = document.getElementById("answerOptions");
     const msgEl = document.getElementById("answeredMsg");
 
-    // Vis evt. allereie avgjeve svar (t.d. etter attendenavigering)
     const myAnswerRef = db.ref("answers/q" + idx + "/" + myDevice);
-    let previouslyChosen = null;
 
-    q.options.forEach((opt, i) => {
+    q.options.forEach(opt => {
       const btn = document.createElement("div");
       btn.className = "option";
       btn.textContent = opt;
       btn.onclick = () => {
-        myAnswerRef.set({ option: i, time: Date.now() })
+        myAnswerRef.set({ option: [...optsEl.children].indexOf(btn), time: Date.now() })
           .then(() => {
             document.querySelectorAll(".option").forEach(o => o.classList.remove("chosen"));
             btn.classList.add("chosen");
@@ -216,10 +212,10 @@ if (view === "answer") {
       optsEl.appendChild(btn);
     });
 
+    // Vis evt. tidlegare svar (t.d. etter attendenavigering)
     myAnswerRef.on("value", snap => {
-      previouslyChosen = snap.exists() ? snap.val().option : null;
-      if (previouslyChosen !== null) {
-        document.querySelectorAll(".option")[previouslyChosen]?.classList.add("chosen");
+      if (snap.exists()) {
+        document.querySelectorAll(".option")[snap.val().option]?.classList.add("chosen");
         msgEl.textContent = "Svaret ditt er registrert!";
       }
     });
